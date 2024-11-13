@@ -1,6 +1,8 @@
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 from app.backend.db import Base
+from app.models.task import Task
+
 
 class User(Base):
     __tablename__ = 'users'
@@ -12,6 +14,7 @@ class User(Base):
     slug = Column(String, unique=True, index=True)
 
     tasks = relationship("Task", back_populates="user")
+
 
 from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy.orm import Session
@@ -29,14 +32,25 @@ async def all_users(db: Annotated[Session, Depends(get_db)]):
         users = db.scalars(select(User)).all()
         return users
 
-@router.get('/{user_id}')
-async def user_by_id(user_id: int, db: Annotated[Session, Depends(get_db)]):
+# @router.get('/{user_id}')
+# async def user_by_id(user_id: int, db: Annotated[Session, Depends(get_db)]):
+#     async with db.begin():
+#         user = db.scalar(select(User).where(User.id == user_id))
+#         if user:
+#             return user
+#         else:
+#             raise HTTPException(status_code=404, detail="User was not found")
+
+@router.get('/{user_id}/tasks')
+async def tasks_by_user_id(user_id: int, db: Annotated[Session, Depends(get_db)]):
     async with db.begin():
         user = db.scalar(select(User).where(User.id == user_id))
         if user:
-            return user
+            tasks = db.scalars(select(Task).where(Task.user_id == user_id)).all()
+            return tasks
         else:
             raise HTTPException(status_code=404, detail="User was not found")
+
 
 @router.post('/create')
 async def create_user(user: CreateUser, db: Annotated[Session, Depends(get_db)]):
@@ -58,12 +72,24 @@ async def update_user(user_id: int, user: UpdateUser, db: Annotated[Session, Dep
         else:
             raise HTTPException(status_code=404, detail="User was not found")
 
+# @router.delete('/delete/{user_id}')
+# async def delete_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
+#     async with db.begin():
+#         existing_user = db.scalar(select(User).where(User.id == user_id))
+#         if existing_user:
+#             db.execute(delete(User).where(User.id == user_id))
+#             return {'status_code': status.HTTP_200_OK, 'transaction': 'User deletion is successful!'}
+#         else:
+#             raise HTTPException(status_code=404, detail="User was not found")
+
 @router.delete('/delete/{user_id}')
 async def delete_user(user_id: int, db: Annotated[Session, Depends(get_db)]):
     async with db.begin():
-        existing_user = db.scalar(select(User).where(User.id == user_id))
-        if existing_user:
+        user = db.scalar(select(User).where(User.id == user_id))
+        if user:
+            db.execute(delete(Task).where(Task.user_id == user_id))  # Удаление всех связанных задач
             db.execute(delete(User).where(User.id == user_id))
-            return {'status_code': status.HTTP_200_OK, 'transaction': 'User deletion is successful!'}
+            return {'status_code': status.HTTP_200_OK, 'transaction': 'User and related tasks deletion is successful!'}
         else:
             raise HTTPException(status_code=404, detail="User was not found")
+
